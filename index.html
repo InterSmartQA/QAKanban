@@ -1134,12 +1134,13 @@
         alert('Task created successfully!');
         generateWorkScheduleMessage({
           ...taskData,
-          qaAssignee,
-          projectName,
-          startDate,
-          startTime,
-          endTime,
-          ktStatus
+          qaAssignee: qaAssignee,
+          projectName: projectName,
+          startDate: startDate,
+          startTime: startTime,
+          dueDate: dueDate,
+          endTime: endTime,
+          ktStatus: ktStatus
         });
         resetTaskForm();
         await loadTasksFromSupabase();
@@ -1153,15 +1154,18 @@
     function generateWorkScheduleMessage(task) {
       try {
         const startDate = new Date(task.startDate);
-        const taskCount = allTasks.filter(t => t.qaAssignee === task.qaAssignee && t.startDate === task.startDate && t.status !== 'completed').length + 1;
+        const dueDate = new Date(task.dueDate);
+        const taskCount = allTasks.filter(t => t.qaAssignee === task.qaAssignee && t.startDate === task.startDate && t.status !== 'completed').length;
         const message = `
-${task.qaAssignee}, ${startDate.toLocaleDateString('en-US', { day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' })}, ${task.startTime}-${task.endTime}
+${task.qaAssignee}, ${startDate.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' })}
+Time: ${task.startTime}-${task.endTime}
 Project: ${task.projectName}
 KT Status: ${task.ktStatus}
 No of tasks: ${taskCount}
-Time: Start: ${task.startTime} End: ${task.endTime}
+Start Date: ${startDate.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' })}
+Due Date: ${dueDate.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' })}
         `;
-        copyToClipboard(message).then(() => {
+        copyToClipboard(message.trim()).then(() => {
           alert('Work Schedule message copied to clipboard!');
         }).catch(error => {
           console.error('Clipboard error:', error);
@@ -1177,15 +1181,20 @@ Time: Start: ${task.startTime} End: ${task.endTime}
     function generateWorkCompletionMessage(task) {
       try {
         const startDate = new Date(task.startDate);
+        const dueDate = new Date(task.dueDate);
+        const actualDate = task.actualEndDate ? new Date(task.actualEndDate) : null;
         const message = `
-${task.qaAssignee}, ${startDate.toLocaleDateString('en-US', { day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' })}, ${task.startTime}-${task.endTime}
+${task.qaAssignee}, ${startDate.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' })}
 Project: ${task.projectName}
 Tasks Completed: ${task.tasksCompleted || 'N/A'}
-Time: Start: ${task.startTime} End: ${task.actualEndTime || task.endTime}
+Start Date: ${startDate.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' })}
+Time: Start: ${task.startTime}
+Due Date: ${dueDate.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' })}
+End: ${task.actualEndTime || task.endTime}
 Deviation Time: ${task.deviationTime || '0 hours'}
 Deviation Reasons: ${task.deviationReasons || 'None'}
         `;
-        copyToClipboard(message).then(() => {
+        copyToClipboard(message.trim()).then(() => {
           alert('Work completion message copied to clipboard!');
         }).catch(error => {
           console.error('Clipboard error:', error);
@@ -1639,7 +1648,7 @@ Deviation Reasons: ${task.deviationReasons || 'None'}
               <td>${task.bugTracker || ''}</td>
               <td>${task.ktStatus || ''}</td>
               <td>${task.status || ''}</td>
-              <td><input class="edit-input" type="number" value="${task.tasksCompleted || ''}" data-field="tasksCompleted" autocomplete="off"></td>
+              <td><input class="edit-input" type="text" value="${task.tasksCompleted || ''}" data-field="tasksCompleted" autocomplete="off"></td>
               <td><input class="edit-input" type="date" value="${task.actualEndDate || ''}" data-field="actualEndDate"></td>
               <td><input class="edit-input" type="time" value="${task.actualEndTime || ''}" data-field="actualEndTime" autocomplete="off"></td>
               <td>${task.deviationTime || '-'}</td>
@@ -1702,7 +1711,7 @@ Deviation Reasons: ${task.deviationReasons || 'None'}
         const { error } = await supabase
           .from('qa_tasks')
           .update({
-            tasks_completed: updates.tasksCompleted ? parseInt(updates.tasksCompleted) : null,
+            tasks_completed: updates.tasksCompleted,
             actual_end_date: updates.actualEndDate,
             actual_end_time: updates.actualEndTime,
             deviation_time: updates.deviationTime,
@@ -1923,7 +1932,7 @@ Deviation Reasons: ${task.deviationReasons || 'None'}
             key.length,
             ...data.map(row => (row[key] || '').toString().length)
           );
-          return { wch: Math.min(maxLength + 5, 50) }; // Increased padding
+          return { wch: Math.min(maxLength + 5, 50) };
         });
         worksheet['!cols'] = colWidths;
 
