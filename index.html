@@ -2,7 +2,6 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>QA Team Kanban Board</title>
   <!-- Load external libraries -->
@@ -33,6 +32,21 @@
       --border: #e2e8f0;
       --hover: #edf2f7;
       --overdue: #fee2e2;
+
+      /* Kanban column backgrounds */
+      --todo-bg: #e3f2fd;
+      --inprogress-bg: #fff7e6;
+      --completed-bg: #e6f7ec;
+
+      /* Kanban header colors */
+      --todo-header: #1976d2;
+      --inprogress-header: #f59e0b;
+      --completed-header: #10b981;
+
+      /* Kanban card text colors */
+      --todo-text: #1565c0;
+      --inprogress-text: #b45309;
+      --completed-text: #047857;
     }
 
     * {
@@ -159,12 +173,32 @@
       border: 1px solid var(--border);
     }
 
+    .kanban-column[data-status="todo"] {
+      background: var(--todo-bg);
+    }
+    .kanban-column[data-status="inprogress"] {
+      background: var(--inprogress-bg);
+    }
+    .kanban-column[data-status="completed"] {
+      background: var(--completed-bg);
+    }
+
     .kanban-column h3 {
       font-size: 16px;
       font-weight: 600;
       color: var(--primary);
       margin-bottom: 15px;
       text-align: center;
+    }
+
+    .kanban-column[data-status="todo"] h3 {
+      color: var(--todo-header);
+    }
+    .kanban-column[data-status="inprogress"] h3 {
+      color: var(--inprogress-header);
+    }
+    .kanban-column[data-status="completed"] h3 {
+      color: var(--completed-header);
     }
 
     .kanban-row {
@@ -206,6 +240,19 @@
       font-size: 13px;
       margin: 5px 0;
       color: var(--text);
+    }
+
+    .kanban-column[data-status="todo"] .kanban-card p,
+    .kanban-column[data-status="todo"] .kanban-card strong {
+      color: var(--todo-text);
+    }
+    .kanban-column[data-status="inprogress"] .kanban-card p,
+    .kanban-column[data-status="inprogress"] .kanban-card strong {
+      color: var(--inprogress-text);
+    }
+    .kanban-column[data-status="completed"] .kanban-card p,
+    .kanban-column[data-status="completed"] .kanban-card strong {
+      color: var(--completed-text);
     }
 
     .kanban-column.date-column .kanban-card {
@@ -640,6 +687,13 @@
   <div class="container">
     <div class="error-message hidden" id="errorMessage"></div>
 
+    <!-- Date filter for Kanban board -->
+    <div class="controls" id="kanbanDateFilter" style="margin-bottom: 10px;">
+      <input type="text" id="kanbanBoardDate" placeholder="Select Date" style="min-width:160px;">
+      <button onclick="filterKanbanByDate()">Filter Date</button>
+      <button onclick="resetKanbanDateFilter()">Today & Yesterday</button>
+    </div>
+
     <div class="controls" id="adminControls">
       <select id="qaAssignee">
         <option value="">Select QA Member</option>
@@ -711,7 +765,8 @@
           <div class="kanban-tasks"></div>
         </div>
       </div>
-      <div class="kanban-column date-column" data-status="date">
+      <!-- Hide the Date column -->
+      <div class="kanban-column date-column" data-status="date" style="display:none;">
         <h3>Date</h3>
         <div class="kanban-row" data-qa="Aswathi">
           <h4>Aswathi</h4>
@@ -964,6 +1019,13 @@
         console.error('DOM Content Loaded error:', error);
         showError('Initialization error. Please refresh the page.');
       }
+
+      if (typeof window.flatpickr !== 'undefined') {
+        const kanbanDate = document.getElementById('kanbanBoardDate');
+        if (kanbanDate) {
+          flatpickr(kanbanDate, { dateFormat: 'Y-m-d', allowInput: true });
+        }
+      }
     });
 
     // Populate month filter
@@ -1213,13 +1275,41 @@ Deviation Reasons: ${task.deviationReasons || 'None'}
         const columns = document.querySelectorAll('.kanban-column');
         if (!columns) return;
 
+        // Determine which dates to show for filtered columns
+        let allowedDates = [];
+        if (kanbanBoardFilterDate) {
+          allowedDates = [kanbanBoardFilterDate];
+        } else {
+          allowedDates = [getCurrentDate(), getYesterdayDate()];
+        }
+
         columns.forEach(column => {
           const status = column.dataset.status;
+          // Hide the Date column
+          if (status === 'date') {
+            column.style.display = 'none';
+            return;
+          }
+          column.style.display = ''; // Ensure visible
+
           const tasksContainers = column.querySelectorAll('.kanban-tasks');
           tasksContainers.forEach(container => {
             container.innerHTML = '';
             const qa = container.parentElement.dataset.qa;
-            const filteredTasks = allTasks.filter(task => task.qaAssignee === qa && (status === 'date' || task.status === status));
+            let filteredTasks;
+            if (status === 'todo') {
+              // Show all To Do tasks for this QA
+              filteredTasks = allTasks.filter(task =>
+                task.qaAssignee === qa && task.status === 'todo'
+              );
+            } else {
+              // Filter by allowed dates for other statuses
+              filteredTasks = allTasks.filter(task =>
+                task.qaAssignee === qa &&
+                task.status === status &&
+                allowedDates.includes(task.startDate)
+              );
+            }
             filteredTasks.forEach(task => {
               const card = document.createElement('div');
               card.className = 'kanban-card';
@@ -1227,11 +1317,21 @@ Deviation Reasons: ${task.deviationReasons || 'None'}
               if (status !== 'date') {
                 card.draggable = true;
               }
-              card.innerHTML = `
-                <p><strong>Project:</strong> ${task.projectName}</p>
-                <p><strong>Phase:</strong> ${task.testingPhase || 'N/A'}</p>
-                ${status === 'date' ? `<p><strong>Start:</strong> ${task.startDate} ${task.startTime}</p>` : ''}
-              `;
+              // Show assigned and due dates for To Do, otherwise show start
+              if (status === 'todo') {
+                card.innerHTML = `
+                  <p><strong>Project:</strong> ${task.projectName}</p>
+                  <p><strong>Phase:</strong> ${task.testingPhase || 'N/A'}</p>
+                  <p><strong>Assigned:</strong> ${task.startDate} ${task.startTime}</p>
+                  <p><strong>Due:</strong> ${task.dueDate} ${task.endTime}</p>
+                `;
+              } else {
+                card.innerHTML = `
+                  <p><strong>Project:</strong> ${task.projectName}</p>
+                  <p><strong>Phase:</strong> ${task.testingPhase || 'N/A'}</p>
+                  <p><strong>Start:</strong> ${task.startDate} ${task.startTime}</p>
+                `;
+              }
               container.appendChild(card);
             });
           });
@@ -1956,6 +2056,35 @@ Deviation Reasons: ${task.deviationReasons || 'None'}
         console.error('Export to Excel error:', error);
         showError('Failed to export report to Excel.');
       }
+    }
+
+    // Helper: get yesterday's date in YYYY-MM-DD (IST)
+    function getYesterdayDate() {
+      const now = new Date();
+      now.setDate(now.getDate() - 1);
+      return now.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+    }
+
+    // Kanban board date filter state
+    let kanbanBoardFilterDate = null;
+
+    // Filter Kanban board by selected date
+    function filterKanbanByDate() {
+      const dateInput = document.getElementById('kanbanBoardDate');
+      if (!dateInput || !dateInput.value) {
+        showError('Please select a date to filter.');
+        return;
+      }
+      kanbanBoardFilterDate = dateInput.value;
+      renderKanbanBoard();
+    }
+
+    // Reset Kanban board date filter (show today & yesterday)
+    function resetKanbanDateFilter() {
+      kanbanBoardFilterDate = null;
+      const dateInput = document.getElementById('kanbanBoardDate');
+      if (dateInput) dateInput.value = '';
+      renderKanbanBoard();
     }
   </script>
 </body>
